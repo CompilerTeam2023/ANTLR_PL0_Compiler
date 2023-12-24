@@ -12,7 +12,7 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
     private int tempVarCounter = 0; // 临时变量
     private final int initStat = 100; //初始地址
     private int nextStat = initStat; // 下一条代码地址
-    private Stack<Integer> StackM = new Stack<>();// 条件语句的回填M地址栈
+
     private ArrayList<String> IntermediateCode = new ArrayList<>();
 
     private String newTempVar() {
