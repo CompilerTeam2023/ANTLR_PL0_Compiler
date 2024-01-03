@@ -3,80 +3,46 @@ package antlr.PL0;
 import PL0.PL0BaseVisitor;
 import PL0.PL0Parser;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.Stack;
 import java.util.ArrayList;
 
 public class PL0VisitorImpl extends PL0BaseVisitor<String> {
-    private int tempVarCounter = 0; // 临时变量
-    private final int initStat = 100; //初始地址
-    private int nextStat = initStat; // 下一条代码地址
+    private int tempVarCounter; // 临时变量
+    private final int initStat; // 初始地址
+    private int nextStat; // 下一条代码地址
 
-    private ArrayList<String> IntermediateCode = new ArrayList<>();
+    private final Table table; // 对符号表的引用
+    private final Intermediater intermediater; // 对中间代码生成器的引用
 
-    private String newTempVar() {
-        return "T" + tempVarCounter++;
+    // 构造函数，初始化符号表和中间代码生成工具等
+    public PL0VisitorImpl(Table t, Intermediater i) {
+        table = t;
+        intermediater = i;
+        tempVarCounter = i.tempVarCounter;
+        initStat = i.initStat;
+        nextStat = i.nextStat;
     }
 
-    /*
-        保存中间代码
-     */
-    public void emit(String code) {
-        IntermediateCode.add(code);
-    }
-
-    /*
-        遍历并输出所有中间代码
-     */
-    public void ouputCode() {
-        String fileName = "IntermediateCode.txt";
-
-        try (FileWriter writer = new FileWriter(fileName)) {
-            for (String code : IntermediateCode) {
-                System.out.println(code);
-                writer.write(code + "\n"); // 写入文件
-            }
-        } catch (IOException e) {
-            System.out.println("中间代码写入文件失败！");
-            e.printStackTrace();
+    @Override
+    public String visitVariable_declaration(PL0Parser.Variable_declarationContext ctx) {
+        String id = "";
+        int count = (ctx.getChildCount() - 1) / 2;// 变量个数
+        for (int i = 0; i < count; i++) {
+            id = ctx.identifier(i).IDENTIFIER().getText();
+            if (!table.addItem(id, "Variable"))
+                Err.handleError("Variable identifier [" + id + "] repeat.", ctx.getStart().getLine());
         }
+        return null;
     }
-
-    /*
-        回填地址
-     */
-    public void BackPatch(ArrayList<Integer> list, Integer addr) {
-        for (Integer value : list) {
-            int index = value - initStat; // 计算数组下标
-            // 检查数组下标是否合法
-            if (index >= 0 && index < IntermediateCode.size()) {
-                String ic = IntermediateCode.get(index); // 获取对应下标的数据
-                ic += (addr.toString()); // 在尾部添加地址 addr
-                IntermediateCode.set(index, ic);
-            } else {
-                System.out.println("回填地址出错！");
-            }
-        }
-    }
-
-    /*
-        合并两个链表，并返回合并后的链首
-     */
-    public ArrayList<Integer> merge(ArrayList<Integer> list1, ArrayList<Integer> list2) {
-        ArrayList<Integer> mergedList = new ArrayList<>(list1);
-        mergedList.addAll(list2);
-        return mergedList;
-    }
-
 
     @Override
     public String visitConstant_definition(PL0Parser.Constant_definitionContext ctx) {
         String id = ctx.identifier().IDENTIFIER().getText();
+        if (!table.addItem(id, "Constant"))
+            Err.handleError("Constant identifier [" + id + "] repeat.", ctx.getStart().getLine());
         String op = ctx.ASSIGN().getText();
         String un_int = ctx.unsigned_integer().INTEGER().getText();
         String code = Integer.toString(nextStat) + ":    " + id + op + un_int;
-        emit(code);
+        intermediater.emit(code);
         nextStat++;
         return null;
     }
@@ -97,8 +63,12 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         String left = ctx.identifier().IDENTIFIER().getText();
         String op = ctx.ASSIGN().getText();
         String right = visit(ctx.expression());
+        // 错误处理
+        if (!table.lookup(left)) {
+            Err.handleError("Error in assignStatement: Identifier [" + left + "] undefined!", ctx.getStart().getLine());
+        }
         String code = Integer.toString(nextStat) + ":    " + left + op + right;
-        emit(code);
+        intermediater.emit(code);
         nextStat++;
         return right;
     }
@@ -113,9 +83,9 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         } else {
             p0 = ctx.add_sub().getText();
             String p1 = visit(ctx.term());
-            String tempVar = newTempVar();
+            String tempVar = intermediater.newTempVar();
             String code = Integer.toString(nextStat) + ":    " + tempVar + ":=" + p0 + p1;
-            emit(code);
+            intermediater.emit(code);
             nextStat++;
             return tempVar;
         }
@@ -127,9 +97,9 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         String p0 = visit(ctx.expression());
         String p1 = ctx.add_sub().getText();
         String p2 = visit(ctx.term());
-        String tempVar = newTempVar();
+        String tempVar = intermediater.newTempVar();
         String code = Integer.toString(nextStat) + ":    " + tempVar + ":=" + p0 + p1 + p2;
-        emit(code);
+        intermediater.emit(code);
         nextStat++;
         return tempVar;
     }
@@ -140,9 +110,14 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         if (ctx.factor().getChild(1) instanceof PL0Parser.ExpressionContext) {
             String p1 = visit(ctx.factor());
             return p1;
-        } else {
-            return ctx.factor().getText();
+        } else if (ctx.factor().getChild(0) instanceof PL0Parser.IdentifierContext) {
+            String id = ctx.factor().getText();
+            // 错误处理，标识符进符号表并做存在性检查
+            if (!table.lookup(id))
+                Err.handleError("Identifier [" + id + "] undefined!", ctx.getStart().getLine());
+            return id;
         }
+        return ctx.factor().getText();
     }
 
 
@@ -151,9 +126,9 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         String p0 = visit(ctx.term());
         String p1 = ctx.mul_div().getText();
         String p2 = visit(ctx.factor());
-        String tempVar = newTempVar();
+        String tempVar = intermediater.newTempVar();
         String code = Integer.toString(nextStat) + ":    " + tempVar + ":=" + p0 + p1 + p2;
-        emit(code);
+        intermediater.emit(code);
         nextStat++;
         return tempVar;
     }
@@ -183,12 +158,12 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         String op = ctx.comparison_operator().getText();
         String right = visit(ctx.expression(1));
 
-        ctx.getTrueList().add(nextStat); //写死，真链一定在nextStat+2
+        ctx.getTrueList().add(nextStat); // 写死，真链一定在nextStat+2
         ctx.getFalseList().add(nextStat + 1);
-        String code = Integer.toString(nextStat) + ":    if " + left + op + right + " goto "; //待回填：true
-        emit(code);
+        String code = Integer.toString(nextStat) + ":    if " + left + op + right + " goto "; // 待回填：true
+        intermediater.emit(code);
         nextStat++;
-        emit(Integer.toString(nextStat) + ":    goto "); //待回填：false
+        intermediater.emit(Integer.toString(nextStat) + ":    goto "); // 待回填：false
         nextStat++;
         return null;
     }
@@ -200,15 +175,15 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
 
         visit(ctx.condition());
         int M1 = nextStat;
-        BackPatch(ctx.condition().getTrueList(), M1); //回填trueList地址:此时nextStat一定为M1.quard
+        intermediater.BackPatch(ctx.condition().getTrueList(), M1); // 回填trueList地址:此时nextStat一定为M1.quard
 
         visit(ctx.statement());
         int M2 = nextStat;
-        BackPatch(ctx.condition().getFalseList(), M2); //回填E.falseList地址:此时nextStat一定为M2.quard
+        intermediater.BackPatch(ctx.condition().getFalseList(), M2); // 回填E.falseList地址:此时nextStat一定为M2.quard
 
         ArrayList<Integer> S1 = ctx.statement().getNextList();
         ArrayList<Integer> S = ctx.getNextList();
-        S = merge(ctx.condition().getFalseList(), S1); //合并链
+        S = intermediater.merge(ctx.condition().getFalseList(), S1); // 合并链
         return null;
     }
 
@@ -226,25 +201,25 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
 
         ArrayList<Integer> S = ctx.getNextList();
         ArrayList<Integer> S1 = ctx.statement().getNextList();
-        BackPatch(S1,M1);
+        intermediater.BackPatch(S1, M1);
 
-        BackPatch(ctx.condition().getTrueList(),M2);
+        intermediater.BackPatch(ctx.condition().getTrueList(), M2);
         S = ctx.condition().getFalseList();
 
-        BackPatch(ctx.condition().getFalseList(), M3); //回填E.falseList地址:此时nextStat一定为M3.quard
+        intermediater.BackPatch(ctx.condition().getFalseList(), M3); // 回填E.falseList地址:此时nextStat一定为M3.quard
 
         String code = Integer.toString(nextStat) + ":    goto " + Integer.toString(M1);
-        emit(code);
+        intermediater.emit(code);
         nextStat++;
 
         return null;
     }
 
-    
+
     @Override
     public String visitCompound_statement(PL0Parser.Compound_statementContext ctx) {
         int count = (ctx.getChildCount() - 1) / 2;
-        for (int i = 0; i < count ; i++) {
+        for (int i = 0; i < count; i++) {
             visit(ctx.statement(i));
         }
         return null;
