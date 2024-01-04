@@ -1,0 +1,9 @@
+PROGRAM SINGLEIF
+VAR x,y;
+BEGIN
+  y:=1;
+  x:=5;
+  IF (x-5*y)>=0 THEN
+    IF y>0 THEN
+      x:=x+y+2*3;
+END

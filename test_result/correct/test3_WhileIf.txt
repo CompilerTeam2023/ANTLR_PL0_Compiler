@@ -1,0 +1,17 @@
+PROGRAM SINGLEIF
+VAR x,y,z;
+BEGIN
+  y:=1;
+  x:=5;
+  WHILE (x+y)*2>0 DO
+    BEGIN
+      IF x>0 THEN
+        x:=(x-3)*2;
+      IF y>x THEN
+        BEGIN
+          z:=y;
+          y:=x;
+          x:=z;
+        END
+    END
+END

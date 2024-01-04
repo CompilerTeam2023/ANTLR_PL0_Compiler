@@ -1,0 +1,12 @@
+PROGRAM MULTIWHILE
+VAR x,y;
+BEGIN
+  x:=1;
+  y:=3;
+  WHILE x<5 DO 
+    WHILE y>0 DO
+      BEGIN
+        y:=y-1;
+        x:=x+y;
+      END
+END

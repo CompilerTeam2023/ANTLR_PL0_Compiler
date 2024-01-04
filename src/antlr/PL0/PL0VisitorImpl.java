@@ -67,6 +67,8 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         if (!table.lookup(left)) {
             Err.handleError("Error in assignStatement: Identifier [" + left + "] undefined!", ctx.getStart().getLine());
         }
+        if (!table.addItem(left, "Constant"))
+            Err.handleError("Constant identifier [" + left + "] can't be modified.", ctx.getStart().getLine());
         String code = Integer.toString(nextStat) + ":    " + left + op + right;
         intermediater.emit(code);
         nextStat++;
