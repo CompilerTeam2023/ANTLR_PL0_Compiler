@@ -63,12 +63,14 @@ public class PL0VisitorImpl extends PL0BaseVisitor<String> {
         String left = ctx.identifier().IDENTIFIER().getText();
         String op = ctx.ASSIGN().getText();
         String right = visit(ctx.expression());
-        // 错误处理
+        // 标识符未定义
         if (!table.lookup(left)) {
             Err.handleError("Error in assignStatement: Identifier [" + left + "] undefined!", ctx.getStart().getLine());
         }
-        if (!table.addItem(left, "Constant"))
+        //标识符已定义，但为常量
+        if(table.getType(left) == "Constant"){
             Err.handleError("Constant identifier [" + left + "] can't be modified.", ctx.getStart().getLine());
+        }
         String code = Integer.toString(nextStat) + ":    " + left + op + right;
         intermediater.emit(code);
         nextStat++;

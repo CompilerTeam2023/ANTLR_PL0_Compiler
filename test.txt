@@ -1,3 +1,7 @@
 PROGRAM add
 CONST x:=1;
-x:=2;
+VAR y;
+BEGIN
+    y:=1;
+    x:=2
+END

@@ -25,6 +25,11 @@ public class Table {
             return false;
     }
 
+    //获取标识符对应的类型：Constant/Variable
+    public String getType(String id){
+        return tokenTable.get(id);
+    }
+
     // printTable函数: 打印符号表内容
     public void printTable() {
         for (HashMap.Entry<String, String> entry : tokenTable.entrySet()) {
